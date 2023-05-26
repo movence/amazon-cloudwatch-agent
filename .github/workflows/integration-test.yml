@@ -672,7 +672,7 @@ jobs:
         uses: nick-fields/retry@v2
         with:
           max_attempts: 1
-          timeout_minutes: 40
+          timeout_minutes: 60
           retry_wait_seconds: 5
           command: |
             cd terraform/ec2/win
