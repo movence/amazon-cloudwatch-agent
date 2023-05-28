@@ -769,40 +769,40 @@ jobs:
   #         retry_wait_seconds: 5
   #         command: cd terraform/ec2/mac && terraform destroy --auto-approve
 
-#  StopLocalStack:
-#    name: 'StopLocalStack'
-#    runs-on: ubuntu-latest
-#    if: ${{ always() }}
-#    needs: [ StartLocalStack, EC2LinuxIntegrationTest ]
-#    defaults:
-#      run:
-#        working-directory: terraform/ec2/localstack
-#    permissions:
-#      id-token: write
-#      contents: read
-#    steps:
-#      - uses: actions/checkout@v3
-#        with:
-#          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
-#          ref: ${{env.CWA_GITHUB_TEST_REPO_BRANCH}}
-#
-#      - name: Configure AWS Credentials
-#        uses: aws-actions/configure-aws-credentials@v2
-#        with:
-#          role-to-assume: ${{ env.TERRAFORM_AWS_ASSUME_ROLE }}
-#          aws-region: us-west-2
-#
-#      - name: Copy state
-#        run: aws s3 cp s3://${S3_INTEGRATION_BUCKET}/integration-test/local-stack-terraform-state/${GITHUB_SHA}/terraform.tfstate .
-#
-#      - name: Verify Terraform version
-#        run: terraform --version
-#
-#      - name: Terraform init
-#        run: terraform init
-#
-#      - name: Terraform destroy
-#        run: terraform destroy --auto-approve
+  StopLocalStack:
+    name: 'StopLocalStack'
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [ StartLocalStack, EC2LinuxIntegrationTest ]
+    defaults:
+      run:
+        working-directory: terraform/ec2/localstack
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: ${{env.CWA_GITHUB_TEST_REPO_NAME}}
+          ref: ${{env.CWA_GITHUB_TEST_REPO_BRANCH}}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ env.TERRAFORM_AWS_ASSUME_ROLE }}
+          aws-region: us-west-2
+
+      - name: Copy state
+        run: aws s3 cp s3://${S3_INTEGRATION_BUCKET}/integration-test/local-stack-terraform-state/${GITHUB_SHA}/terraform.tfstate .
+
+      - name: Verify Terraform version
+        run: terraform --version
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform destroy
+        run: terraform destroy --auto-approve
 
   # ECSEC2IntegrationTest:
   #   name: 'ECSEC2IntegrationTest'
