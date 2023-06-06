@@ -601,7 +601,12 @@ jobs:
           timeout_minutes: 60
           retry_wait_seconds: 5
           command: |
-            cd terraform/ec2/linux
+            if [ "${{ matrix.arrays.terraform_dir }}" != "" ]; then
+              cd "${{ matrix.arrays.terraform_dir }}"
+            else
+              cd terraform/ec2/linux
+            fi
+            
             terraform init
             terraform apply --auto-approve \
               -var="ssh_key_value=${PRIVATE_KEY}" -var="github_test_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}" \
