@@ -607,6 +607,7 @@ jobs:
               cd terraform/ec2/linux
             fi
             
+            terraform init
             if terraform apply --auto-approve \
               -var="ssh_key_value=${PRIVATE_KEY}" -var="github_test_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}" \
               -var="test_name=${{ matrix.arrays.os }}" \
