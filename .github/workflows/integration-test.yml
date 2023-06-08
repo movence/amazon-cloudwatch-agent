@@ -10,7 +10,7 @@ env:
   ECR_INTEGRATION_TEST_REPO: "cwagent-integration-test"
   CWA_GITHUB_TEST_REPO_NAME: "movence/amazon-cloudwatch-agent-test"
   CWA_GITHUB_TEST_REPO_URL: "https://github.com/movence/amazon-cloudwatch-agent-test.git"
-  CWA_GITHUB_TEST_REPO_BRANCH: "role-test"
+  CWA_GITHUB_TEST_REPO_BRANCH: "temp-role"
 
 on:
   push:
@@ -607,8 +607,7 @@ jobs:
               cd terraform/ec2/linux
             fi
             
-            terraform init
-            terraform apply --auto-approve \
+            if terraform apply --auto-approve \
               -var="ssh_key_value=${PRIVATE_KEY}" -var="github_test_repo=${{env.CWA_GITHUB_TEST_REPO_URL}}" \
               -var="test_name=${{ matrix.arrays.os }}" \
               -var="cwa_github_sha=${GITHUB_SHA}" -var="install_agent=${{ matrix.arrays.installAgentCommand }}" \
@@ -623,7 +622,19 @@ jobs:
               -var="s3_bucket=${S3_INTEGRATION_BUCKET}" \
               -var="plugin_tests='${{ github.event.inputs.plugins }}'" \
               -var="ssh_key_name=${KEY_NAME}" \
-              -var="test_dir=${{ matrix.arrays.test_dir }}"
+              -var="test_dir=${{ matrix.arrays.test_dir }}" ; then terraform destroy -auto-approve
+            else
+              terraform destroy -auto-approve && exit 1
+            fi
+      #This is here just in case workflow cancel
+      - name: Terraform destroy
+        if: ${{ cancelled() || failure() }}
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          timeout_minutes: 8
+          retry_wait_seconds: 5
+          command: cd terraform/ec2/linux && terraform destroy --auto-approve
 
 #  EC2UserDataIntegrationTest:
 #    needs: [MakeBinary, StartLocalStack, GenerateTestMatrix]
