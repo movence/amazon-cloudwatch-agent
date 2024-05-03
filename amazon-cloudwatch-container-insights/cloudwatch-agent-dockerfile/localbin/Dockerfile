@@ -5,7 +5,7 @@ ARG CERT_IMAGE=ubuntu:latest
 FROM $CERT_IMAGE as cert
 
 # Need to repeat the ARG after each FROM
-ARG TARGETARCH
+ARG TARGETARCH="amd64"
 RUN mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
 RUN mkdir -p /opt/aws/amazon-cloudwatch-agent/var
 RUN apt-get update &&  \
