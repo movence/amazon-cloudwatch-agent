@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT
 
-package jmx
+package prometheus
 
 import (
 	"go.opentelemetry.io/collector/confmap"
@@ -22,7 +22,7 @@ func NewTranslators(conf *confmap.Conf) pipeline.TranslatorMap {
 	if len(destinations) == 0 {
 		destinations = append(destinations, "")
 	}
-	switch v := conf.Get(common.JmxConfigKey).(type) {
+	switch v := conf.Get(common.MetricsPrometheus).(type) {
 	case []any:
 		for index := range v {
 			for _, destination := range destinations {

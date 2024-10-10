@@ -32,10 +32,6 @@ const (
 	placeholderTarget = "<target-system>"
 )
 
-var (
-	metricsDestinationsKey = common.ConfigKey(common.MetricsKey, common.MetricsDestinationsKey)
-)
-
 type translator struct {
 	name        string
 	index       int
@@ -126,7 +122,7 @@ func (t *translator) Translate(conf *confmap.Conf) (*common.ComponentTranslators
 
 	switch t.destination {
 	case "", common.CloudWatchKey:
-		if !conf.IsSet(metricsDestinationsKey) || conf.IsSet(common.ConfigKey(metricsDestinationsKey, common.CloudWatchKey)) {
+		if !conf.IsSet(common.MetricsDestinations) || conf.IsSet(common.ConfigKey(common.MetricsDestinations, common.CloudWatchKey)) {
 			translators.Processors.Set(cumulativetodeltaprocessor.NewTranslator(common.WithName(common.PipelineNameJmx), cumulativetodeltaprocessor.WithConfigKeys(common.JmxConfigKey)))
 			translators.Exporters.Set(awscloudwatch.NewTranslator())
 			translators.Extensions.Set(agenthealth.NewTranslator(component.DataTypeMetrics, []string{agenthealth.OperationPutMetricData}))
@@ -134,7 +130,7 @@ func (t *translator) Translate(conf *confmap.Conf) (*common.ComponentTranslators
 			return nil, fmt.Errorf("pipeline (%s) does not have destination (%s) in configuration", t.name, t.destination)
 		}
 	case common.AMPKey:
-		if conf.IsSet(metricsDestinationsKey) && conf.IsSet(common.ConfigKey(metricsDestinationsKey, common.AMPKey)) {
+		if conf.IsSet(common.MetricsDestinations) && conf.IsSet(common.ConfigKey(common.MetricsDestinations, common.AMPKey)) {
 			translators.Exporters.Set(prometheusremotewrite.NewTranslatorWithName(common.AMPKey))
 			translators.Processors.Set(batchprocessor.NewTranslatorWithNameAndSection(t.name, common.MetricsKey))
 			if conf.IsSet(common.MetricsAggregationDimensionsKey) {

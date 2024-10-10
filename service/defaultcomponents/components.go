@@ -19,6 +19,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscontainerinsightreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver"
 	"go.opentelemetry.io/collector/exporter"
@@ -49,6 +50,7 @@ func Factories() (otelcol.Factories, error) {
 		otlpreceiver.NewFactory(),
 		tcplogreceiver.NewFactory(),
 		udplogreceiver.NewFactory(),
+		prometheusreceiver.NewFactory(),
 	); err != nil {
 		return otelcol.Factories{}, err
 	}

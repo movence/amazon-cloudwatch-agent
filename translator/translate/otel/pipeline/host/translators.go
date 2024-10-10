@@ -17,10 +17,6 @@ import (
 	adaptertranslator "github.com/aws/amazon-cloudwatch-agent/translator/translate/otel/receiver/adapter"
 )
 
-var (
-	metricsDestinationsKey = common.ConfigKey(common.MetricsKey, common.MetricsDestinationsKey)
-)
-
 func NewTranslators(conf *confmap.Conf, os string) (pipeline.TranslatorMap, error) {
 	adapterReceivers, err := adaptertranslator.FindReceiversInConfig(conf, os)
 	if err != nil {
@@ -46,7 +42,7 @@ func NewTranslators(conf *confmap.Conf, os string) (pipeline.TranslatorMap, erro
 		common.AMPKey: prometheusremotewrite.NewTranslatorWithName(common.AMPKey),
 	}
 
-	if !conf.IsSet(metricsDestinationsKey) || conf.IsSet(common.ConfigKey(metricsDestinationsKey, "cloudwatch")) {
+	if !conf.IsSet(common.MetricsDestinations) || conf.IsSet(common.ConfigKey(common.MetricsDestinations, "cloudwatch")) {
 		exporters := common.NewTranslatorMap(awscloudwatch.NewTranslator())
 		if hasHostPipeline {
 			translators.Set(NewTranslator(common.PipelineNameHost, hostReceivers, exporters))
@@ -55,7 +51,7 @@ func NewTranslators(conf *confmap.Conf, os string) (pipeline.TranslatorMap, erro
 			translators.Set(NewTranslator(common.PipelineNameHostDeltaMetrics, deltaReceivers, exporters))
 		}
 	}
-	if conf.IsSet(metricsDestinationsKey) {
+	if conf.IsSet(common.MetricsDestinations) {
 		exporters := common.NewTranslatorMap[component.Config]()
 		for key := range otherExporters {
 			if _, ok := common.GetString(conf, common.ConfigKey(common.MetricsKey, common.MetricsDestinationsKey, key)); ok {

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	receiversCount  = 6
+	receiversCount  = 7
 	processorCount  = 11
 	exportersCount  = 6
 	extensionsCount = 3
@@ -27,6 +27,7 @@ func TestComponents(t *testing.T) {
 	assert.NotNil(t, receivers[component.MustNewType("otlp")])
 	assert.NotNil(t, receivers[component.MustNewType("tcplog")])
 	assert.NotNil(t, receivers[component.MustNewType("udplog")])
+	assert.NotNil(t, receivers[component.MustNewType("prometheusreceiver")])
 
 	processors := factories.Processors
 	assert.Len(t, processors, processorCount)

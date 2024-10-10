@@ -5,6 +5,7 @@ package adapter
 
 import (
 	"fmt"
+	"github.com/aws/amazon-cloudwatch-agent/translator/translate/otel/receiver/prometheus"
 	"log"
 	"time"
 
@@ -72,8 +73,9 @@ var (
 	// otelReceivers is used for receivers that need to be in the same pipeline that
 	// exports to Cloudwatch while not having to follow the adapter rules
 	otelReceivers = map[string]common.Translator[component.Config]{
-		common.OtlpKey: otlp.NewTranslator(otlp.WithDataType(component.DataTypeMetrics)),
-		common.JmxKey:  jmx.NewTranslator(),
+		common.OtlpKey:       otlp.NewTranslator(otlp.WithDataType(component.DataTypeMetrics)),
+		common.JmxKey:        jmx.NewTranslator(),
+		common.PrometheusKey: prometheus.NewTranslator(),
 	}
 )
 

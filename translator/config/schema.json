@@ -149,6 +149,9 @@
             },
             "jmx": {
               "$ref": "#/definitions/metricsDefinition/definitions/jmxDefinitions"
+            },
+            "prometheus": {
+              "$ref": "#/definitions/metricsDefinition/definitions/prometheusDefinitions"
             }
           },
           "minProperties": 1,
@@ -576,6 +579,20 @@
             ]
           },
           "uniqueItems": true
+        },
+        "prometheusDefinitions": {
+          "type": "object",
+          "properties": {
+            "prometheus_config_path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "prometheus_config_path"
+          ],
+          "additionalProperties": false
         }
       }
     },
