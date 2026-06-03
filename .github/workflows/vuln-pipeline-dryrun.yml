@@ -1,0 +1,203 @@
+name: CVE Patch Pipeline (Dry Run)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  security-events: read
+
+jobs:
+  dryrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        env:
+          GOPROXY: direct
+
+      - name: Dry-run pipeline
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const now = new Date();
+            const MAX_TRIAGE_PER_RUN = 2;  // just 2 for test speed
+            const SLA = { critical: 3, high: 14, medium: 30, low: 90 };
+
+            core.info('=== PHASE 1: Discover Dependabot PRs ===');
+
+            const allPRs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            const dependabotPRs = allPRs.filter(pr => pr.user.login === 'dependabot[bot]');
+            core.info(`Found ${dependabotPRs.length} open Dependabot PRs`);
+
+            if (dependabotPRs.length === 0) {
+              core.info('No Dependabot PRs found. If this is a fork, Dependabot may not be enabled.');
+              core.info('Testing govulncheck on main branch instead...');
+
+              const start = Date.now();
+              try {
+                const output = execSync('govulncheck -json ./... 2>/dev/null', {
+                  encoding: 'utf-8',
+                  timeout: 600000,
+                });
+                const elapsed = Math.round((Date.now() - start) / 1000);
+                core.info(`govulncheck completed in ${elapsed}s`);
+                const result = parseGovulncheckJson(output);
+                core.info(`Result on main: ${result}`);
+              } catch (e) {
+                const elapsed = Math.round((Date.now() - start) / 1000);
+                core.info(`govulncheck exited non-zero in ${elapsed}s (expected if vulns found)`);
+                const output = e.stdout || '';
+                const result = parseGovulncheckJson(output);
+                core.info(`Result on main: ${result}`);
+              }
+            }
+
+            let triageCount = 0;
+            for (const pr of dependabotPRs.slice(0, MAX_TRIAGE_PER_RUN)) {
+              core.info(`\n--- PR #${pr.number}: ${pr.title} ---`);
+
+              const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+              });
+              core.info(`  Labels: ${labels.map(l => l.name).join(', ') || '(none)'}`);
+
+              try {
+                execSync(`git fetch origin pull/${pr.number}/head:pr-${pr.number}`, { stdio: 'pipe' });
+                execSync(`git checkout pr-${pr.number}`, { stdio: 'pipe' });
+                execSync('go mod download', { stdio: 'pipe', timeout: 300000 });
+
+                const start = Date.now();
+                let vulnResult;
+                try {
+                  const output = execSync('govulncheck -json ./... 2>/dev/null', {
+                    encoding: 'utf-8',
+                    timeout: 600000,
+                  });
+                  vulnResult = parseGovulncheckJson(output);
+                } catch (e) {
+                  const output = e.stdout || '';
+                  vulnResult = parseGovulncheckJson(output);
+                }
+                const elapsed = Math.round((Date.now() - start) / 1000);
+
+                core.info(`  govulncheck: ${vulnResult} (${elapsed}s)`);
+                core.info(`  [DRY RUN] Would label: ${vulnResult}, ready for testing`);
+                if (vulnResult === 'vuln-reachable') {
+                  core.info(`  [DRY RUN] Would also label: needs-security-review`);
+                }
+
+                execSync('git checkout main', { stdio: 'pipe' });
+                triageCount++;
+              } catch (e) {
+                core.warning(`  Failed: ${e.message}`);
+                execSync('git checkout main || true', { stdio: 'pipe' });
+              }
+            }
+
+            // --- Phase 2: Check merge eligibility (read-only) ---
+            core.info('\n=== PHASE 2: Auto-merge eligibility (read-only) ===');
+            for (const pr of dependabotPRs) {
+              const { data: checks } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pr.head.sha,
+              });
+              const integCheck = checks.check_runs.find(r => r.name.toLowerCase().includes('integration'));
+              const allPassed = checks.check_runs.filter(r => r.conclusion !== null)
+                .every(r => ['success', 'skipped'].includes(r.conclusion));
+
+              if (integCheck?.conclusion === 'success' && allPassed) {
+                core.info(`  PR #${pr.number} — [DRY RUN] Would enable auto-merge + approve`);
+              }
+            }
+
+            // --- Phase 3: Test Dependabot alerts API ---
+            core.info('\n=== PHASE 3: Dependabot alerts API ===');
+            try {
+              const alerts = await github.paginate(github.rest.dependabot.listAlertsForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                sort: 'created',
+                direction: 'asc',
+              });
+              core.info(`SUCCESS: Got ${alerts.length} open Dependabot alerts`);
+
+              let critCount = 0, highCount = 0, medCount = 0, lowCount = 0;
+              for (const a of alerts) {
+                const sev = a.security_vulnerability?.severity;
+                if (sev === 'critical') critCount++;
+                else if (sev === 'high') highCount++;
+                else if (sev === 'medium') medCount++;
+                else if (sev === 'low') lowCount++;
+              }
+              core.info(`  Critical: ${critCount}, High: ${highCount}, Medium: ${medCount}, Low: ${lowCount}`);
+
+              // SLA check
+              const violations = alerts.filter(a => {
+                const sev = a.security_vulnerability?.severity;
+                const slaDays = SLA[sev];
+                if (!slaDays) return false;
+                const age = Math.floor((now - new Date(a.created_at)) / 86400000);
+                return age > slaDays;
+              });
+              core.info(`  SLA violations: ${violations.length}`);
+              core.info(`  [DRY RUN] Would send Slack: ${critCount > 0 || violations.length > 0 ? 'YES' : 'NO (silent)'}`);
+            } catch (e) {
+              core.error(`FAILED: ${e.status || 'unknown'} — ${e.message}`);
+              core.error('The Dependabot alerts API requires a PAT. Add CVE_PIPELINE_PAT secret with security_events scope.');
+            }
+
+            core.info('\n=== DRY RUN COMPLETE ===');
+
+            function parseGovulncheckJson(output) {
+              if (!output || !output.trim()) return 'vuln-not-reachable';
+              const lines = output.trim().split('\n');
+              let hasReachable = false;
+              let hasTestOnly = false;
+              for (const line of lines) {
+                let msg;
+                try { msg = JSON.parse(line); } catch { continue; }
+                if (msg.finding) {
+                  const trace = msg.finding.trace || [];
+                  if (trace.length === 0) continue;
+                  const callerFrame = trace[0];
+                  if (callerFrame.function && callerFrame.position) {
+                    if (callerFrame.position.includes('_test.go')) {
+                      hasTestOnly = true;
+                    } else {
+                      hasReachable = true;
+                    }
+                  }
+                }
+              }
+              if (hasReachable) return 'vuln-reachable';
+              if (hasTestOnly) return 'vuln-test-only';
+              return 'vuln-not-reachable';
+            }
