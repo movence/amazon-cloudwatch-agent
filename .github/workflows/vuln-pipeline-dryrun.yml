@@ -54,8 +54,7 @@ jobs:
             core.info(`Found ${dependabotPRs.length} open Dependabot PRs`);
 
             if (dependabotPRs.length === 0) {
-              core.info('No Dependabot PRs found. If this is a fork, Dependabot may not be enabled.');
-              core.info('Testing govulncheck on main branch instead...');
+              core.info('No Dependabot PRs on this repo. Testing govulncheck on main branch...');
 
               const start = Date.now();
               try {
@@ -73,6 +72,56 @@ jobs:
                 const output = e.stdout || '';
                 const result = parseGovulncheckJson(output);
                 core.info(`Result on main: ${result}`);
+              }
+
+              // Phase 1b: Test PR checkout path against upstream Dependabot PRs
+              core.info('\n=== PHASE 1b: Test PR checkout via upstream (aws/amazon-cloudwatch-agent) ===');
+              try {
+                const { data: upstreamPRs } = await github.rest.pulls.list({
+                  owner: 'aws',
+                  repo: 'amazon-cloudwatch-agent',
+                  state: 'open',
+                  per_page: 5,
+                });
+                const upstreamDep = upstreamPRs.filter(pr => pr.user.login === 'dependabot[bot]');
+                core.info(`Found ${upstreamDep.length} Dependabot PRs on upstream`);
+
+                if (upstreamDep.length > 0) {
+                  const testPR = upstreamDep[0];
+                  core.info(`Testing with upstream PR #${testPR.number}: ${testPR.title}`);
+
+                  execSync('git remote add upstream https://github.com/aws/amazon-cloudwatch-agent.git 2>/dev/null || true', { stdio: 'pipe' });
+                  execSync(`git fetch upstream pull/${testPR.number}/head:upstream-pr-${testPR.number}`, { stdio: 'pipe' });
+                  execSync(`git checkout upstream-pr-${testPR.number}`, { stdio: 'pipe' });
+                  execSync('go mod download', { stdio: 'pipe', timeout: 300000 });
+
+                  const prStart = Date.now();
+                  let prResult;
+                  try {
+                    const output = execSync('govulncheck -json ./... 2>/dev/null', {
+                      encoding: 'utf-8',
+                      timeout: 600000,
+                    });
+                    prResult = parseGovulncheckJson(output);
+                  } catch (e) {
+                    const output = e.stdout || '';
+                    prResult = parseGovulncheckJson(output);
+                  }
+                  const prElapsed = Math.round((Date.now() - prStart) / 1000);
+
+                  core.info(`  govulncheck on PR #${testPR.number}: ${prResult} (${prElapsed}s)`);
+                  core.info(`  [DRY RUN] Would label: ${prResult}, ready for testing`);
+                  if (prResult === 'vuln-reachable') {
+                    core.info(`  [DRY RUN] Would also label: needs-security-review`);
+                  }
+
+                  execSync('git checkout main', { stdio: 'pipe' });
+                } else {
+                  core.info('No upstream Dependabot PRs available for testing');
+                }
+              } catch (e) {
+                core.warning(`Phase 1b failed: ${e.message}`);
+                execSync('git checkout main || true', { stdio: 'pipe' });
               }
             }
 
@@ -170,8 +219,14 @@ jobs:
               core.info(`  SLA violations: ${violations.length}`);
               core.info(`  [DRY RUN] Would send Slack: ${critCount > 0 || violations.length > 0 ? 'YES' : 'NO (silent)'}`);
             } catch (e) {
-              core.error(`FAILED: ${e.status || 'unknown'} — ${e.message}`);
-              core.error('The Dependabot alerts API requires a PAT. Add CVE_PIPELINE_PAT secret with security_events scope.');
+              const msg = e.message || '';
+              if (msg.includes('disabled')) {
+                core.warning(`Dependabot alerts are not enabled on this repo (expected for forks). On the real repo (aws/amazon-cloudwatch-agent), this works with GITHUB_TOKEN.`);
+              } else if (e.status === 403) {
+                core.error(`FAILED: 403 — GITHUB_TOKEN lacks access. A PAT with security_events scope is needed.`);
+              } else {
+                core.error(`FAILED: ${e.status || 'unknown'} — ${msg}`);
+              }
             }
 
             core.info('\n=== DRY RUN COMPLETE ===');
