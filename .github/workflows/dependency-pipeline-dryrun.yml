@@ -1,4 +1,4 @@
-name: CVE Patch Pipeline (Dry Run)
+name: Dependency Update Pipeline (Dry Run)
 
 on:
   workflow_dispatch:
@@ -68,7 +68,7 @@ jobs:
                 core.info(`Result on main: ${result}`);
               } catch (e) {
                 const elapsed = Math.round((Date.now() - start) / 1000);
-                core.info(`govulncheck exited non-zero in ${elapsed}s (expected if vulns found)`);
+                core.info(`govulncheck exited non-zero in ${elapsed}s (expected if findings exist)`);
                 const output = e.stdout || '';
                 const result = parseGovulncheckJson(output);
                 core.info(`Result on main: ${result}`);
@@ -111,8 +111,8 @@ jobs:
 
                   core.info(`  govulncheck on PR #${testPR.number}: ${prResult} (${prElapsed}s)`);
                   core.info(`  [DRY RUN] Would label: ${prResult}, ready for testing`);
-                  if (prResult === 'vuln-reachable') {
-                    core.info(`  [DRY RUN] Would also label: needs-security-review`);
+                  if (prResult === 'dep-reachable') {
+                    core.info(`  [DRY RUN] Would also label: needs-maintainer-review`);
                   }
 
                   execSync('git checkout main', { stdio: 'pipe' });
@@ -142,23 +142,23 @@ jobs:
                 execSync('go mod download', { stdio: 'pipe', timeout: 300000 });
 
                 const start = Date.now();
-                let vulnResult;
+                let analysisResult;
                 try {
                   const output = execSync('govulncheck -json ./... 2>/dev/null', {
                     encoding: 'utf-8',
                     timeout: 600000,
                   });
-                  vulnResult = parseGovulncheckJson(output);
+                  analysisResult = parseGovulncheckJson(output);
                 } catch (e) {
                   const output = e.stdout || '';
-                  vulnResult = parseGovulncheckJson(output);
+                  analysisResult = parseGovulncheckJson(output);
                 }
                 const elapsed = Math.round((Date.now() - start) / 1000);
 
-                core.info(`  govulncheck: ${vulnResult} (${elapsed}s)`);
-                core.info(`  [DRY RUN] Would label: ${vulnResult}, ready for testing`);
-                if (vulnResult === 'vuln-reachable') {
-                  core.info(`  [DRY RUN] Would also label: needs-security-review`);
+                core.info(`  govulncheck: ${analysisResult} (${elapsed}s)`);
+                core.info(`  [DRY RUN] Would label: ${analysisResult}, ready for testing`);
+                if (analysisResult === 'dep-reachable') {
+                  core.info(`  [DRY RUN] Would also label: needs-maintainer-review`);
                 }
 
                 execSync('git checkout main', { stdio: 'pipe' });
@@ -232,7 +232,7 @@ jobs:
             core.info('\n=== DRY RUN COMPLETE ===');
 
             function parseGovulncheckJson(output) {
-              if (!output || !output.trim()) return 'vuln-not-reachable';
+              if (!output || !output.trim()) return 'dep-not-reachable';
               const lines = output.trim().split('\n');
               let hasReachable = false;
               let hasTestOnly = false;
@@ -252,7 +252,7 @@ jobs:
                   }
                 }
               }
-              if (hasReachable) return 'vuln-reachable';
-              if (hasTestOnly) return 'vuln-test-only';
-              return 'vuln-not-reachable';
+              if (hasReachable) return 'dep-reachable';
+              if (hasTestOnly) return 'dep-test-only';
+              return 'dep-not-reachable';
             }
